@@ -7,8 +7,6 @@ import (
 	"job-queuer/app/util/database"
 	"job-queuer/app/util/env"
 
-	"github.com/robfig/cron/v3"
-
 	"github.com/spf13/cobra"
 )
 
@@ -35,16 +33,6 @@ func RunProcess() {
 
 	jobRepo := repo.NewJobRepo(db)
 	jobService := service.NewJobService(jobRepo)
-	c := cron.New(cron.WithSeconds())
 
-	c.AddFunc("*/20 * * * * *", func(jobService service.JobService) func() {
-		return func() {
-			croncontroller.StartJobCron(jobService)
-		}
-	}(jobService))
-
-	c.Start()
-	defer c.Stop()
-
-	select {}
+	croncontroller.StartJobCron(jobService)
 }
