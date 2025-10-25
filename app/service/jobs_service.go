@@ -17,8 +17,7 @@ type JobService interface {
 	ScheduleJob(dto model.JobDTO) (*model.Job, error)
 	CheckJobStatus(jobID string) (*model.Job, error)
 	GetQueuedJobs() ([]model.Job, error)
-	ProcessTopJob(jobs []model.Job) (*model.Job, error)
-	ProcessJobsWithQuota(jobs []model.Job) ([]*model.Job, error)
+	ProcessNextJob(jobs []model.Job) (*model.Job, error)
 }
 
 type jobService struct {
@@ -59,112 +58,73 @@ func (s *jobService) GetQueuedJobs() ([]model.Job, error) {
 	return s.repo.GetQueuedJobs()
 }
 
-func (s *jobService) ProcessTopJob(jobs []model.Job) (*model.Job, error) {
+func (s *jobService) ProcessNextJob(jobs []model.Job) (*model.Job, error) {
 	if len(jobs) == 0 {
 		return nil, nil
 	}
-	job := jobs[0]
-	// Emulate job running
-	time.Sleep(2 * time.Second)
-	success := rand.Intn(100) >= 20 // 80% success
-	now := time.Now()
-	job.StartedAt = &now
-	job.CompletedAt = &now
-	if success {
-		job.Status = "success"
-		result := "Job completed successfully"
-		job.Result = &result
-		job.ErrorMessage = nil
-	} else {
-		job.Status = "failed"
-		job.Result = nil
-		errMsg := "Job failed randomly"
-		job.ErrorMessage = &errMsg
-		job.Retries++
-		// If low fails, increase priority for next cycle
-		if job.Priority == "low" {
-			job.Priority = "medium"
-		} else if job.Priority == "medium" {
-			job.Priority = "high"
-		}
-		// If retries >= 3, terminate job
-		if job.Retries >= 3 {
-			job.Status = "terminated"
-			termMsg := "Job terminated after 3 retries"
-			job.ErrorMessage = &termMsg
-		}
-	}
-	if err := s.repo.UpdateJobStatus(&job); err != nil {
-		return nil, err
-	}
-	return &job, nil
-}
 
-// ProcessJobsWithQuota processes jobs based on priority quotas
-func (s *jobService) ProcessJobsWithQuota(jobs []model.Job) ([]*model.Job, error) {
-	quota := map[string]int{"high": 3, "medium": 2, "low": 1}
-	processed := []*model.Job{}
-	// used := map[string]int{"high": 0, "medium": 0, "low": 0}
-
-	// Remove jobs with retries >= 3
-	filtered := []model.Job{}
+	// Filter out jobs that reached max retries
+	validJobs := []model.Job{}
 	for _, job := range jobs {
 		if job.Retries < 3 {
-			filtered = append(filtered, job)
+			validJobs = append(validJobs, job)
 		}
 	}
+	if len(validJobs) == 0 {
+		return nil, nil
+	}
 
-	// Split jobs by priority
-	highJobs, medJobs, lowJobs := []model.Job{}, []model.Job{}, []model.Job{}
-	for _, job := range filtered {
+	// Sort jobs by last update (oldest first)
+	sort.SliceStable(validJobs, func(i, j int) bool {
+		getTime := func(job model.Job) time.Time {
+			if job.CompletedAt != nil {
+				return *job.CompletedAt
+			}
+			if job.StartedAt != nil {
+				return *job.StartedAt
+			}
+			return job.CreatedAt
+		}
+		return getTime(validJobs[i]).Before(getTime(validJobs[j]))
+	})
+
+	// Assign time factor based on hierarchy (older = higher factor)
+	timeFactors := make(map[string]float64) // UUID string -> factor
+	for idx, job := range validJobs {
+		timeFactors[job.ID.String()] = float64(len(validJobs) - idx) // oldest = highest
+	}
+
+	// Priority factor: high=3, medium=2, low=1
+	priorityFactor := func(job model.Job) float64 {
 		switch job.Priority {
 		case "high":
-			highJobs = append(highJobs, job)
+			return 3
 		case "medium":
-			medJobs = append(medJobs, job)
+			return 2
 		case "low":
-			lowJobs = append(lowJobs, job)
+			return 1
+		default:
+			return 1
 		}
 	}
 
-	// Sort each by oldest updated timestamp (CompletedAt, StartedAt, CreatedAt)
-	sortJobs := func(jobs []model.Job) {
-		sort.SliceStable(jobs, func(i, j int) bool {
-			getTime := func(job model.Job) time.Time {
-				if job.CompletedAt != nil {
-					return *job.CompletedAt
-				}
-				if job.StartedAt != nil {
-					return *job.StartedAt
-				}
-				return job.CreatedAt
-			}
-			return getTime(jobs[i]).Before(getTime(jobs[j]))
-		})
+	// Select the job with the highest combined factor
+	var selected model.Job
+	maxFactor := -1.0
+	for _, job := range validJobs {
+		factor := priorityFactor(job) + timeFactors[job.ID.String()]
+		if factor > maxFactor {
+			maxFactor = factor
+			selected = job
+		}
 	}
-	sortJobs(highJobs)
-	sortJobs(medJobs)
-	sortJobs(lowJobs)
 
-	// Allocate jobs by quota
-	toProcess := []model.Job{}
-	toProcess = append(toProcess, highJobs[:min(quota["high"], len(highJobs))]...)
-	toProcess = append(toProcess, medJobs[:min(quota["medium"], len(medJobs))]...)
-	toProcess = append(toProcess, lowJobs[:min(quota["low"], len(lowJobs))]...)
-
-	results := make(chan result, len(toProcess))
+	// Process only this job
+	results := make(chan result, 1)
 	ctx := context.Background()
-	for _, job := range toProcess {
-		go s.processJob(ctx, job, results)
-	}
-	for i := 0; i < len(toProcess); i++ {
-		res := <-results
-		if res.err != nil {
-			return processed, res.err
-		}
-		processed = append(processed, res.job)
-	}
-	return processed, nil
+	go s.processJob(ctx, selected, results)
+	res := <-results
+	return res.job, res.err
 }
 
 type result struct {
@@ -177,7 +137,7 @@ func (s *jobService) processJob(ctx context.Context, job model.Job, results chan
 	success := rand.Intn(100) >= 20
 	now := time.Now()
 	job.StartedAt = &now
-	time.Sleep(2 * time.Second)
+	time.Sleep(5 * time.Second)
 	now = time.Now()
 	job.CompletedAt = &now
 	if success {
@@ -209,11 +169,4 @@ func (s *jobService) processJob(ctx context.Context, job model.Job, results chan
 		job *model.Job
 		err error
 	}{job: &job, err: err}
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
