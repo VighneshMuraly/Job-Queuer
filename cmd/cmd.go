@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/robfig/cron/v3"
 	"github.com/spf13/cobra"
 )
 
@@ -35,7 +36,14 @@ func StartServer() {
 	if err != nil {
 		panic("Failed to connect to database")
 	}
-	r := router.NewRouter(db)
+
+	c := cron.New(cron.WithSeconds())
+
+	r := router.NewRouter(db, c)
+
+	c.Start()
+	defer c.Stop()
+
 	log.Printf("Starting server on %s...", "8080")
 	if err := http.ListenAndServe("localhost:8080", r); err != nil {
 		log.Fatalf("Server failed: %v", err)
