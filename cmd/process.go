@@ -17,7 +17,6 @@ var workerCmd = &cobra.Command{
 	Short: "Run the job worker",
 	Run: func(cmd *cobra.Command, args []string) {
 		RunProcess()
-		// Add your worker logic here
 	},
 }
 
@@ -36,9 +35,8 @@ func RunProcess() {
 
 	jobRepo := repo.NewJobRepo(db)
 	jobService := service.NewJobService(jobRepo)
-	c := cron.New(cron.WithSeconds()) // with seconds precision
+	c := cron.New(cron.WithSeconds())
 
-	// Add a cron job: every 10 seconds
 	c.AddFunc("*/20 * * * * *", func(jobService service.JobService) func() {
 		return func() {
 			croncontroller.StartJobCron(jobService)
