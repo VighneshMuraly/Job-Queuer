@@ -1,31 +1,68 @@
 package database
 
 import (
-	"database/sql"
 	"fmt"
+	"job-queuer/app/util/env"
 	"log"
-	"os"
+
+	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
-func RunMigrations(db *sql.DB, migrationsDir string) error {
-	files, err := os.ReadDir(migrationsDir)
+func RunMigrations() error {
+	dbURL := fmt.Sprintf(
+		"postgres://%s:%s@%s:%s/%s?sslmode=disable",
+		env.GetDBUser(),
+		env.GetDBPassword(),
+		env.GetDBHost(),
+		env.GetDBPort(),
+		env.GetDBName(),
+	)
+
+	migrationsPath := "file://./app/migrations"
+
+	m, err := migrate.New(migrationsPath, dbURL)
 	if err != nil {
-		return fmt.Errorf("failed to read migrations directory: %w", err)
+		return fmt.Errorf("failed to create migrate instance: %w", err)
 	}
-	for _, file := range files {
-		if file.IsDir() {
-			continue
+
+	// Run all up migrations
+	err2 := m.Up()
+	if err2 != nil && err != migrate.ErrNoChange {
+		log.Printf("Migration failed: %v. Attempting rollback...", err)
+		if rbErr := RollbackLastMigration(); rbErr != nil {
+			return fmt.Errorf("migration failed: %v; rollback also failed: %w", err, rbErr)
 		}
-		path := fmt.Sprintf("%s/%s", migrationsDir, file.Name())
-		content, err := os.ReadFile(path)
-		if err != nil {
-			return fmt.Errorf("failed to read migration file %s: %w", path, err)
-		}
-		log.Printf("Running migration: %s", file.Name())
-		_, err = db.Exec(string(content))
-		if err != nil {
-			return fmt.Errorf("failed to execute migration %s: %w", file.Name(), err)
-		}
+		return fmt.Errorf("migration failed and rollback executed: %w", err)
 	}
+
+	log.Println("Migrations applied successfully")
+	return nil
+}
+
+func RollbackLastMigration() error {
+	dbURL := fmt.Sprintf(
+		"postgres://%s:%s@%s:%s/%s?sslmode=disable",
+		env.GetDBUser(),
+		env.GetDBPassword(),
+		env.GetDBHost(),
+		env.GetDBPort(),
+		env.GetDBName(),
+	)
+
+	migrationsPath := "file://./app/migrations"
+
+	m, err := migrate.New(migrationsPath, dbURL)
+	if err != nil {
+		return fmt.Errorf("failed to create migrate instance: %w", err)
+	}
+
+	// Rollback one migration
+	if err := m.Steps(-1); err != nil && err != migrate.ErrNoChange {
+		return fmt.Errorf("rollback failed: %w", err)
+	}
+
+	log.Println("Rolled back last migration")
 	return nil
 }

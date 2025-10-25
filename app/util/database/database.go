@@ -7,6 +7,7 @@ import (
 	"log"
 	"time"
 
+	_ "github.com/lib/pq"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -22,7 +23,7 @@ func InitDB() (*gorm.DB, error) {
 	var db *gorm.DB
 	var err error
 	maxRetries := 5
-	for i := 0; i < maxRetries; i++ {
+	for i := range maxRetries {
 		db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
 		if err == nil {
 			// Run migrations using database/sql
@@ -30,7 +31,7 @@ func InitDB() (*gorm.DB, error) {
 			if err2 != nil {
 				log.Fatalf("Failed to open database for migration: %v", err2)
 			}
-			err2 = RunMigrations(sqlDB, "./app/migrations")
+			err2 = RunMigrations()
 			if err2 != nil {
 				log.Fatalf("Migration failed: %v", err2)
 			}
