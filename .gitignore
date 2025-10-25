@@ -1,0 +1,22 @@
+# Binaries
+*.exe
+*.out
+*.test
+jobqueuer
+
+# Go build cache
+/go/bin/
+/vendor/
+
+# VS Code
+.vscode/
+
+# Logs
+*.log
+
+# Environment files
+.env
+
+# Docker stuff
+**/tmp/*
+**/data/*
