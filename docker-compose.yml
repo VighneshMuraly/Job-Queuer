@@ -2,8 +2,6 @@ services:
   db:
     image: postgres:15-alpine
     container_name: job_db
-    # networks:
-    #   - jobnet
     environment:
       POSTGRES_USER: jobuser
       POSTGRES_PASSWORD: jobpass
@@ -25,8 +23,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    # networks:
-    #   - jobnet
     ports:
       - "8080:8080"
     environment:
