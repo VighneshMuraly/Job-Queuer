@@ -10,6 +10,7 @@ import (
 	handler "job-queuer/app/apihandler"
 	"job-queuer/app/croncontroller"
 	repo "job-queuer/app/repository"
+	"job-queuer/app/router/appmiddleware"
 	"job-queuer/app/service"
 )
 
@@ -31,7 +32,10 @@ func NewRouter(db *gorm.DB, c *cron.Cron) *mux.Router {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ok"}`))
 	}).Methods("GET")
-	r.HandleFunc("/schedule", jobHandler.ScheduleJob).Methods("POST")
-	r.HandleFunc("/status", jobHandler.CheckJobStatus).Methods("GET")
+
+	secured := r.PathPrefix("/api").Subrouter()
+	secured.Use(appmiddleware.APIKeyAuthMiddleware())
+	secured.HandleFunc("/schedule", jobHandler.ScheduleJob).Methods("POST")
+	secured.HandleFunc("/status", jobHandler.CheckJobStatus).Methods("GET")
 	return r
 }

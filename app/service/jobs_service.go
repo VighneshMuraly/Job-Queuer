@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"job-queuer/app/model"
 	repo "job-queuer/app/repository"
 	"sort"
@@ -122,8 +123,10 @@ func (s *jobService) ProcessNextJob(jobs []model.Job) (*model.Job, error) {
 	// Process only this job
 	results := make(chan result, 1)
 	ctx := context.Background()
+	fmt.Println("Processing job ID: " + selected.ID.String())
 	go s.processJob(ctx, selected, results)
 	res := <-results
+	fmt.Println("Completed job ID: " + res.job.ID.String() + " with status: " + res.job.Status)
 	return res.job, res.err
 }
 

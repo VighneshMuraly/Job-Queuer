@@ -52,7 +52,7 @@ A Go-based job queue and scheduler with REST API, cron job processing, and datab
   - Returns `{ "status": "ok" }` if the service is running.
 
 ### Schedule a Job
-- `POST /schedule`
+- `POST /api/schedule`
   - Request Body (JSON):
     ```json
     {
@@ -64,7 +64,7 @@ A Go-based job queue and scheduler with REST API, cron job processing, and datab
   - Response: Job details with ID and status.
 
 ### Check Job Status
-- `GET /status?id=<job_id>`
+- `GET /api/status?id=<job_id>`
   - Returns job status and details for the given job ID.
 
 ## Job Processing Logic
@@ -89,7 +89,7 @@ A Go-based job queue and scheduler with REST API, cron job processing, and datab
 - You can use Postman or curl to interact with the API endpoints.
 - Example:
   ```sh
-  curl -X POST http://localhost:8080/schedule \
+  curl -X POST http://localhost:8080/api/schedule \
     -H "Content-Type: application/json" \
     -d '{ "type": "email", "payload": { "to": "user@example.com" }, "priority": "high" }'
   ```
