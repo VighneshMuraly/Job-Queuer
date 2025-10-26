@@ -26,3 +26,4 @@ func GetDBPort() string     { return viper.GetString("DB_PORT") }
 func GetDBUser() string     { return viper.GetString("DB_USER") }
 func GetDBPassword() string { return viper.GetString("DB_PASSWORD") }
 func GetDBName() string     { return viper.GetString("DB_NAME") }
+func GetAPIKey() string     { return viper.GetString("API_KEY") }

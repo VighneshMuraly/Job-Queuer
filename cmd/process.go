@@ -1,20 +1,22 @@
 package cmd
 
 import (
-	"job-queuer/app/croncontroller"
-	repo "job-queuer/app/repository"
-	"job-queuer/app/service"
+	"fmt"
+	"job-queuer/app/router"
 	"job-queuer/app/util/database"
 	"job-queuer/app/util/env"
+	"log"
+	"net/http"
 
+	"github.com/robfig/cron/v3"
 	"github.com/spf13/cobra"
 )
 
 var workerCmd = &cobra.Command{
 	Use:   "runjob",
-	Short: "Run the job worker",
+	Short: "Run the application worker",
 	Run: func(cmd *cobra.Command, args []string) {
-		RunProcess()
+		StartServer()
 	},
 }
 
@@ -22,17 +24,23 @@ func init() {
 	rootCmd.AddCommand(workerCmd)
 }
 
-func RunProcess() {
-
+func StartServer() {
 	env.InitEnv()
-
+	fmt.Println("Environment variables loaded.")
 	db, err := database.InitDB()
 	if err != nil {
 		panic("Failed to connect to database")
 	}
+	fmt.Println("Database connection established.")
+	c := cron.New(cron.WithSeconds())
 
-	jobRepo := repo.NewJobRepo(db)
-	jobService := service.NewJobService(jobRepo)
+	r := router.NewRouter(db, c)
 
-	croncontroller.StartJobCron(jobService)
+	c.Start()
+	defer c.Stop()
+
+	log.Printf("Starting server on %s...", "8080")
+	if err := http.ListenAndServe(":8080", r); err != nil {
+		log.Fatalf("Server failed: %v", err)
+	}
 }

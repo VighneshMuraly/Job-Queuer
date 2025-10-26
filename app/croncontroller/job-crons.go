@@ -11,5 +11,6 @@ func StartJobCron(svc service.JobService) {
 		fmt.Println("No queued jobs to process")
 		return
 	}
+	fmt.Println("Found " + fmt.Sprint(len(jobs)) + "queued jobs to process")
 	svc.ProcessNextJob(jobs)
 }
