@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"job-queuer/app/model"
 	repo "job-queuer/app/repository"
+	"math"
 	"sort"
 	"time"
 
@@ -28,6 +29,8 @@ type jobService struct {
 func NewJobService(r repo.Repo) JobService {
 	return &jobService{repo: r}
 }
+
+const BackOffFactor = 2
 
 func (s *jobService) ScheduleJob(dto model.JobDTO) (*model.Job, error) {
 	// Validate
@@ -64,12 +67,21 @@ func (s *jobService) ProcessNextJob(jobs []model.Job) (*model.Job, error) {
 		return nil, nil
 	}
 
-	// Filter out jobs that reached max retries
 	validJobs := []model.Job{}
 	for _, job := range jobs {
+		// Filter out jobs that reached max retries
 		if job.Retries < 3 {
+			// Filter out jobs whose back-off time has not yet elapsed
+			if job.StartedAt != nil {
+				backoffSeconds := math.Pow(float64(job.Retries), float64(BackOffFactor))
+				nextRun := job.StartedAt.Add(time.Duration(backoffSeconds) * time.Second)
+				if nextRun.After(time.Now()) {
+					continue
+				}
+			}
 			validJobs = append(validJobs, job)
 		}
+
 	}
 	if len(validJobs) == 0 {
 		return nil, nil
